@@ -1,6 +1,5 @@
 /**
  * Project 2 - Bulletin Board Client (Part 1)
- * Styled like templateA.java, task1.java, and FtpClient.java
  */
 import java.io.*;
 import java.net.*;
@@ -129,7 +128,6 @@ public final class BBClient {
 
 /*
  * Background server-listener thread
- * Styled like HttpRequest runnable in templateA/task1.
  */
 final class ServerListener implements Runnable {
 
