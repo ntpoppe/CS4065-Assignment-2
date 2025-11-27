@@ -3,19 +3,27 @@ package server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Server {
     private final int port;
     private final List<ClientHandler> clients = new CopyOnWriteArrayList<>(); // Thread safe list
-    private final List<Message> messages = new CopyOnWriteArrayList<>(); // Thread safe message history
+    private final List<Group> groups = new CopyOnWriteArrayList<>(); // Thread safe group list
     private volatile boolean running = true; // Sets if the while loop should continue.
                                              // Also silences an infinite loop warning.
 
     public Server(int port) {
         this.port = port;
+        initGroups();
+    }
+
+    private void initGroups() {
+        groups.add(new Group(1, "Group 1"));
+        groups.add(new Group(2, "Group 2"));
+        groups.add(new Group(3, "Group 3"));
+        groups.add(new Group(4, "Group 4"));
+        groups.add(new Group(5, "Group 5"));
     }
 
     // Start the server. Open the ServerSocket and accept connections.
@@ -47,28 +55,19 @@ public class Server {
     // Called when a client is finished.
     public void remove(ClientHandler client) {
         clients.remove(client);
-        if (client.username != null) {
-            broadcast("USER_LEFT " + client.username);
+        // Remove from all groups
+        for (Group group : groups) {
+            if (group.hasMember(client)) {
+                group.removeMember(client);
+                if (client.username != null) {
+                    group.broadcast("USER_LEFT " + client.username, client);
+                }
+            }
         }
         System.out.println("Client removed. Client count: " + clients.size());
     }
 
-    // Broadcast to all clients.
-    public void broadcast(String message) {
-        for (ClientHandler client : clients) {
-            client.send(message);
-        }
-    }
-
-    // Broadcast to all clients, except the sender.
-    public void broadcast(String message, ClientHandler sender) {
-        for (ClientHandler client: clients) {
-            if (client == sender) continue;
-            client.send(message);
-        }
-    }
-
-    // Check if username already exists
+    // Check if username already exists 
     public boolean usernameExists(String username) {
         for (ClientHandler client : clients) {
             if (client.username != null && client.username.equalsIgnoreCase(username)) {
@@ -78,48 +77,28 @@ public class Server {
         return false;
     }
 
-    // Get list of all usernames
-    public List<String> getAllUsernames() {
-        List<String> usernames = new ArrayList<>();
-        for (ClientHandler client : clients) {
-            if (client.username != null) {
-                usernames.add(client.username);
+    // Get list of all groups
+    public List<Group> getGroups() {
+        return groups;
+    }
+    
+    // Get group by ID or Name
+    public Group getGroup(String identifier) {
+        for (Group g : groups) {
+            if (String.valueOf(g.getId()).equals(identifier) || g.getName().equalsIgnoreCase(identifier)) {
+                return g;
             }
         }
-        return usernames;
-    }
-
-    // Get list of all usernames except the specified client
-    public List<String> getAllUsernames(ClientHandler exclude) {
-        List<String> usernames = new ArrayList<>();
-        for (ClientHandler client : clients) {
-            if (client != exclude && client.username != null) {
-                usernames.add(client.username);
-            }
-        }
-        return usernames;
-    }
-
-    // Get last N messages
-    public List<Message> getLastMessages(int count) {
-        List<Message> result = new ArrayList<>();
-        int start = Math.max(0, messages.size() - count);
-        for (int i = start; i < messages.size(); i++) {
-            result.add(messages.get(i));
-        }
-        return result;
-    }
-
-    // Add a new message
-    public void addMessage(Message message) {
-        messages.add(message);
+        return null;
     }
 
     // Get message by ID
     public Message getMessageById(int id) {
-        for (Message msg : messages) {
-            if (msg.getId() == id) {
-                return msg;
+        for (Group group : groups) {
+            for (Message msg : group.getMessages()) {
+                if (msg.getId() == id) {
+                    return msg;
+                }
             }
         }
         return null;
