@@ -39,7 +39,6 @@ public class ClientHandler implements Runnable {
             this.out = writer;
 
             out.println("WELCOME");
-            out.println("GROUPS " + getGroupListString());
 
             String line;
             // Continuously attempt read lines from the client until client disconnects.
@@ -137,6 +136,13 @@ public class ClientHandler implements Runnable {
         // Set username
         this.username = requestedUsername;
         out.println("OK LOGIN");
+        
+        // Automatically join the first group
+        List<Group> groups = server.getGroups();
+        if (!groups.isEmpty()) {
+            Group firstGroup = groups.get(0);
+            joinGroup(firstGroup);
+        }
     }
     
     private void handleJoin(String arg) {
@@ -150,6 +156,10 @@ public class ClientHandler implements Runnable {
             return;
         }
         
+        joinGroup(group);
+    }
+    
+    private void joinGroup(Group group) {
         group.addMember(this);
         joinedGroups.add(group);
         out.println("OK JOIN " + group.getName());
