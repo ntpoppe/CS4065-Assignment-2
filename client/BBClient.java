@@ -1,10 +1,7 @@
 import java.io.*;
 import java.net.*;
-import java.util.*;
 
 public final class BBClient {
-
-    final static String CRLF = "\r\n";
 
     private Socket clientSocket = null;
     private BufferedReader serverReader = null;
@@ -16,96 +13,124 @@ public final class BBClient {
         client.startClient();
     }
 
-    /*
-     * Main console loop
-     */
     public void startClient() {
         try {
             BufferedReader userIn = new BufferedReader(new InputStreamReader(System.in));
-
             printCommands();
 
-            String command;
+            String input;
             while (true) {
                 System.out.print("> ");
-                command = userIn.readLine();
-                if (command == null) continue;
+                input = userIn.readLine();
+                if (input == null) continue;
 
-                // Handle %connect separately
-                if (command.startsWith("%connect")) {
-                    handleConnect(command);
+                if (input.startsWith("%connect")) {
+                    handleConnect(input);
                     continue;
                 }
 
-                // Handle exit even when not connected
-                if (command.equals("%exit")) {
-                    if (connected) sendLine("QUIT");
+                if (input.equals("%exit")) {
+                    if (connected) send("QUIT");
                     disconnect();
                     break;
                 }
 
-                // Any other command requires connection
+                if (input.equals("%help")) {
+                    printCommands();
+                    continue;
+                }
+
                 if (!connected) {
                     System.out.println("ERROR: Not connected. Use %connect first.");
                     continue;
                 }
 
-                // Protocol-based commands
-                if (command.equals("%join")) {
-                    handleJoin(userIn);
+                /* ============================
+                   PART 1 COMMANDS
+                   ============================ */
+
+                if (input.equals("%join")) {
+                    handleLogin(userIn);
                 }
-                else if (command.startsWith("%post")) {
-                    handlePost(command);
+                else if (input.startsWith("%post")) {
+                    handlePost(input);
                 }
-                else if (command.equals("%users")) {
-                    // Users are pushed from server only during login; no direct command.
-                    System.out.println("Server does not support %users command directly.");
+                else if (input.startsWith("%message")) {
+                    handleMessageRetrieve(input);
                 }
-                else if (command.equals("%leave")) {
-                    sendLine("QUIT");
-                    disconnect();
-                    break;
+                else if (input.equals("%leave")) {
+                    send("LEAVE 1"); // Leaving default group #1 (assignment part 1)
                 }
-                else if (command.startsWith("%message")) {
-                    handleGetMessage(command);
+
+                /* ============================
+                   PART 2 COMMANDS
+                   ============================ */
+
+                else if (input.equals("%groups")) {
+                    send("GROUPS");
+                }
+                else if (input.startsWith("%groupjoin")) {
+                    handleGroupJoin(input);
+                }
+                else if (input.startsWith("%grouppost")) {
+                    handleGroupPost(input);
+                }
+                else if (input.startsWith("%groupusers")) {
+                    handleGroupUsers(input);
+                }
+                else if (input.startsWith("%groupleave")) {
+                    handleGroupLeave(input);
+                }
+                else if (input.startsWith("%groupmessage")) {
+                    handleGroupMessage(input);
                 }
                 else {
                     System.out.println("Unknown command. Type %help.");
                 }
             }
 
-        } catch (Exception ex) {
-            System.out.println("Exception: " + ex.getMessage());
+        } catch (Exception e) {
+            System.out.println("Exception: " + e.getMessage());
         }
     }
 
+    /* ==========================================================
+       PRINT HELP MENU
+       ========================================================== */
+
     private void printCommands() {
-        System.out.println("Bulletin Board Client (Part 1)");
+        System.out.println("Bulletin Board Client");
         System.out.println("Commands:");
         System.out.println("  %connect <ip> <port>");
         System.out.println("  %join");
         System.out.println("  %post <subject> | <body>");
         System.out.println("  %message <id>");
         System.out.println("  %leave");
+        System.out.println();
+        System.out.println("Part 2:");
+        System.out.println("  %groups");
+        System.out.println("  %groupjoin <group_id>");
+        System.out.println("  %groupusers <group_id>");
+        System.out.println("  %grouppost <group_id> <subject> | <body>");
+        System.out.println("  %groupleave <group_id>");
+        System.out.println("  %groupmessage <id>");
+        System.out.println();
         System.out.println("  %exit");
         System.out.println("  %help");
-        System.out.println();
     }
 
-    /* ==========================
-       Connection Handling
-       ========================== */
+    
 
     private void handleConnect(String line) {
         try {
-            String[] parts = line.split("\\s+");
-            if (parts.length != 3) {
+            String[] p = line.split("\\s+");
+            if (p.length != 3) {
                 System.out.println("Usage: %connect <ip> <port>");
                 return;
             }
 
-            String ip = parts[1];
-            int port = Integer.parseInt(parts[2]);
+            String ip = p[1];
+            int port = Integer.parseInt(p[2]);
 
             clientSocket = new Socket(ip, port);
             serverReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -114,12 +139,11 @@ public final class BBClient {
 
             System.out.println("Connected to " + ip + ":" + port);
 
-            // Start listener thread
             Thread t = new Thread(new ServerListener(serverReader, clientSocket));
             t.start();
 
-        } catch (Exception ex) {
-            System.out.println("ERROR connecting: " + ex.getMessage());
+        } catch (Exception e) {
+            System.out.println("ERROR connecting: " + e.getMessage());
         }
     }
 
@@ -130,103 +154,123 @@ public final class BBClient {
             if (serverReader != null) serverReader.close();
             if (clientSocket != null) clientSocket.close();
             System.out.println("Disconnected.");
-        } catch (IOException ex) {
-            System.out.println("ERROR during disconnect: " + ex.getMessage());
-        }
+        } catch (IOException ignored) {}
     }
 
-    private void sendLine(String line) {
-        if (serverWriter != null) {
-            serverWriter.println(line);
-        }
+    private void send(String msg) {
+        if (serverWriter != null) serverWriter.println(msg);
     }
 
-    /* ==========================
-       Command Handlers
-       ========================== */
+    //part 1
 
-    // %join → LOGIN <username>
-    private void handleJoin(BufferedReader userIn) {
+    private void handleLogin(BufferedReader userIn) {
         try {
             System.out.print("Enter username: ");
-            String username = userIn.readLine();
-
-            if (username == null || username.trim().isEmpty()) {
+            String username = userIn.readLine().trim();
+            if (username.isEmpty()) {
                 System.out.println("Username cannot be empty.");
                 return;
             }
-
-            sendLine("LOGIN " + username.trim());
-
+            send("LOGIN " + username);
         } catch (IOException e) {
             System.out.println("Error reading username.");
         }
     }
 
-    // %post → MESSAGE subject|body
-    private void handlePost(String command) {
-        if (!command.contains("|")) {
+    private void handlePost(String cmd) {
+        if (!cmd.contains("|")) {
             System.out.println("Usage: %post <subject> | <body>");
             return;
         }
-
-        // Strip the command
-        String args = command.substring(5).trim();
+        String args = cmd.substring(5).trim();
         String[] parts = args.split("\\|", 2);
-
         if (parts.length != 2) {
             System.out.println("Usage: %post <subject> | <body>");
+            return;
+        }
+        String subject = parts[0].trim();
+        String body = parts[1].trim();
+
+        // Part 1 always posts to GROUP 1
+        send("MESSAGE 1 " + subject + "|" + body);
+    }
+
+    private void handleMessageRetrieve(String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %message <id>");
+            return;
+        }
+        send("GET_MESSAGE " + p[1]);
+    }
+
+    //part 3
+
+    private void handleGroupJoin(String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupjoin <group_id>");
+            return;
+        }
+        send("JOIN " + p[1]);
+    }
+
+    private void handleGroupUsers(String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupusers <group_id>");
+            return;
+        }
+        send("USERS " + p[1]);
+    }
+
+    private void handleGroupLeave(String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupleave <group_id>");
+            return;
+        }
+        send("LEAVE " + p[1]);
+    }
+
+    private void handleGroupPost(String cmd) {
+        if (!cmd.contains("|")) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
+            return;
+        }
+
+        // Remove "%grouppost"
+        String remainder = cmd.substring(11).trim();
+
+        // remainder should be "<group_id> <subject> | <body>"
+        String[] p = remainder.split("\\s+", 2);
+        if (p.length < 2) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
+            return;
+        }
+
+        String groupId = p[0];
+        String rest = p[1];
+
+        String[] parts = rest.split("\\|", 2);
+        if (parts.length != 2) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
             return;
         }
 
         String subject = parts[0].trim();
         String body = parts[1].trim();
 
-        if (subject.isEmpty() || body.isEmpty()) {
-            System.out.println("Subject and body cannot be empty.");
-            return;
-        }
-
-        // Server expects: MESSAGE subject|content
-        sendLine("MESSAGE " + subject + "|" + body);
+        send("MESSAGE " + groupId + " " + subject + "|" + body);
     }
 
-    // %message 3 → GET_MESSAGE 3
-    private void handleGetMessage(String command) {
-        String[] parts = command.split("\\s+");
-        if (parts.length != 2) {
-            System.out.println("Usage: %message <id>");
+    private void handleGroupMessage(String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupmessage <id>");
             return;
         }
-
-        sendLine("GET_MESSAGE " + parts[1]);
+        send("GET_MESSAGE " + p[1]);
     }
 }
 
-/* ==========================
-   Listener Thread
-   ========================== */
-
-class ServerListener implements Runnable {
-    private final BufferedReader in;
-    private final Socket socket;
-
-    public ServerListener(BufferedReader in, Socket socket) {
-        this.in = in;
-        this.socket = socket;
-    }
-
-    public void run() {
-        try {
-            String line;
-            while ((line = in.readLine()) != null) {
-                System.out.println("\n[SERVER] " + line);
-                System.out.print("> ");
-            }
-        } catch (IOException e) {
-            System.out.println("Connection closed by server.");
-        } finally {
-            try { socket.close(); } catch (IOException ignored) {}
-        }
-    }
-}
