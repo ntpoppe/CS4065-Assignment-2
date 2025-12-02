@@ -74,3 +74,18 @@ cd server
 ```
 
 If no port is specified, the server defaults to port 8000.
+
+To run the client, do this in another terminal:
+
+### Windows
+```powershell
+cd client
+javac BBClient.java
+java BBClient
+```
+
+### Unix/Linux/macOS
+```bash
+cd client
+make run
+```
