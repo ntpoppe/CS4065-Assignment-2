@@ -87,5 +87,6 @@ java BBClient
 ### Unix/Linux/macOS
 ```bash
 cd client
-make run
+javac BBClient.java
+java BBClient
 ```
