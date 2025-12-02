@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 
+// the main bullet board client (BBClient)
 public final class BBClient {
 
     private Socket clientSocket = null;
@@ -8,17 +9,23 @@ public final class BBClient {
     private PrintWriter serverWriter = null;
     private boolean connected = false;
 
+    //constructor
     public static void main(String[] argv) {
         BBClient client = new BBClient();
         client.startClient();
     }
 
+    // function to start the client, get the commands from the user and interact with the server
     public void startClient() {
         try {
+            //this is a reader that will read what the user will input from the terminal
             BufferedReader userIn = new BufferedReader(new InputStreamReader(System.in));
+            // just list the commands in the terminal so that the user can see what commands are valid and how to format them
             printCommands();
 
+            //storing the user inputs here
             String input;
+
             while (true) {
                 System.out.print("> ");
                 input = userIn.readLine();
@@ -35,19 +42,10 @@ public final class BBClient {
                     break;
                 }
 
-                if (input.equals("%help")) {
-                    printCommands();
-                    continue;
-                }
-
                 if (!connected) {
                     System.out.println("ERROR: Not connected. Use %connect first.");
                     continue;
                 }
-
-                /* ============================
-                   PART 1 COMMANDS
-                   ============================ */
 
                 if (input.equals("%join")) {
                     handleLogin(userIn);
@@ -62,10 +60,8 @@ public final class BBClient {
                     send("LEAVE 1"); // Leaving default group #1 (assignment part 1)
                 }
 
-                /* ============================
-                   PART 2 COMMANDS
-                   ============================ */
-
+                
+                //all of the commands for the groups part
                 else if (input.equals("%groups")) {
                     send("GROUPS");
                 }
@@ -94,10 +90,8 @@ public final class BBClient {
         }
     }
 
-    /* ==========================================================
-       PRINT HELP MENU
-       ========================================================== */
-
+   
+    // this is the printed bulletin board menu for the users to see the command options
     private void printCommands() {
         System.out.println("Bulletin Board Client");
         System.out.println("Commands:");
@@ -116,29 +110,40 @@ public final class BBClient {
         System.out.println("  %groupmessage <id>");
         System.out.println();
         System.out.println("  %exit");
-        System.out.println("  %help");
     }
 
     
-
+    //function to connect to the client. this will be called when the user does the %connect <ip> <port> command.
     private void handleConnect(String line) {
         try {
+            //spliting the input to get the ip and the port number
             String[] p = line.split("\\s+");
+
+            //if the format from the user input is not correct, it will tell te correct usage
             if (p.length != 3) {
                 System.out.println("Usage: %connect <ip> <port>");
                 return;
             }
 
+            //getting the IP address from the input and turning it into an integer
             String ip = p[1];
             int port = Integer.parseInt(p[2]);
 
+            // creating the new client TCP socket using the ip address and port number that were inputted by the user
             clientSocket = new Socket(ip, port);
+
+            //creating a server reader to read the data coming in from the server using clientSocket
             serverReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+            // creating a server writer to send data tot the server using clienSocjet.getOutputStream
             serverWriter = new PrintWriter(clientSocket.getOutputStream(), true);
+            
+            // once it is connected the connected status will become true
             connected = true;
 
             System.out.println("Connected to " + ip + ":" + port);
 
+            //creating a thread to listen for any messages that come from the server and starting
             Thread t = new Thread(new ServerListener(serverReader, clientSocket));
             t.start();
 
@@ -147,6 +152,7 @@ public final class BBClient {
         }
     }
 
+    //function to close the connection with the server, so it closes the server writer, server reader and client socket
     private void disconnect() {
         try {
             connected = false;
@@ -157,6 +163,7 @@ public final class BBClient {
         } catch (IOException ignored) {}
     }
 
+    //function to send the client text message string 
     private void send(String msg) {
         if (serverWriter != null) serverWriter.println(msg);
     }
