@@ -82,7 +82,7 @@ public final class BBClient {
                     handleGroupMessage(input);
                 }
                 else {
-                    System.out.println("Unknown command. Type %help.");
+                    System.out.println("Unknown command.");
                 }
             }
 
