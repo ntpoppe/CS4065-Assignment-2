@@ -1,128 +1,159 @@
 import java.io.*;
 import java.net.*;
-import java.util.*;
 
+// the main bullet board client (BBClient)
 public final class BBClient {
-
-    final static String CRLF = "\r\n";
 
     private Socket clientSocket = null;
     private BufferedReader serverReader = null;
     private PrintWriter serverWriter = null;
     private boolean connected = false;
 
+    //constructor
     public static void main(String[] argv) {
         BBClient client = new BBClient();
         client.startClient();
     }
 
-    /*
-     * Main console loop
-     */
+    // function to start the client, get the commands from the user and interact with the server
     public void startClient() {
         try {
+            //this is a reader that will read what the user will input from the terminal
             BufferedReader userIn = new BufferedReader(new InputStreamReader(System.in));
-
+            // just list the commands in the terminal so that the user can see what commands are valid and how to format them
             printCommands();
 
-            String command;
+            //storing the user inputs here
+            String input;
+
+            // loop to handle any user inputs, when a valid user input is recieved, it will call the proper function
             while (true) {
                 System.out.print("> ");
-                command = userIn.readLine();
-                if (command == null) continue;
+                input = userIn.readLine();
+                if (input == null) continue;
 
-                // Handle %connect separately
-                if (command.startsWith("%connect")) {
-                    handleConnect(command);
+                if (input.startsWith("%connect")) {
+                    handleConnect(input);
                     continue;
                 }
 
-                // Handle exit even when not connected
-                if (command.equals("%exit")) {
-                    if (connected) sendLine("QUIT");
+                if (input.equals("%exit")) {
+                    if (connected) send("QUIT");
                     disconnect();
                     break;
                 }
 
-                // Any other command requires connection
                 if (!connected) {
                     System.out.println("ERROR: Not connected. Use %connect first.");
                     continue;
                 }
 
-                // Protocol-based commands
-                if (command.equals("%join")) {
-                    handleJoin(userIn);
+                if (input.equals("%join")) {
+                    handleLogin(userIn);
                 }
-                else if (command.startsWith("%post")) {
-                    handlePost(command);
+                else if (input.startsWith("%post")) {
+                    handlePost(input);
                 }
-                else if (command.equals("%users")) {
-                    // Users are pushed from server only during login; no direct command.
-                    System.out.println("Server does not support %users command directly.");
+                else if (input.startsWith("%message")) {
+                    handleMessageRetrieve(input);
                 }
-                else if (command.equals("%leave")) {
-                    sendLine("QUIT");
-                    disconnect();
-                    break;
+                else if (input.equals("%leave")) {
+                    send("LEAVE 1"); // Leaving default group #1 (assignment part 1)
                 }
-                else if (command.startsWith("%message")) {
-                    handleGetMessage(command);
+
+                
+                //all of the commands for the groups part
+                else if (input.equals("%groups")) {
+                    send("GROUPS");
+                }
+                else if (input.startsWith("%groupjoin")) {
+                    handleGroupJoin(input);
+                }
+                else if (input.startsWith("%grouppost")) {
+                    handleGroupPost(input);
+                }
+                else if (input.startsWith("%groupusers")) {
+                    handleGroupUsers(input);
+                }
+                else if (input.startsWith("%groupleave")) {
+                    handleGroupLeave(input);
+                }
+                else if (input.startsWith("%groupmessage")) {
+                    handleGroupMessage(input);
                 }
                 else {
-                    System.out.println("Unknown command. Type %help.");
+                    System.out.println("Unknown command.");
                 }
             }
 
-        } catch (Exception ex) {
-            System.out.println("Exception: " + ex.getMessage());
+        } catch (Exception e) {
+            System.out.println("Exception: " + e.getMessage());
         }
     }
 
+   
+    // this is the printed bulletin board menu for the users to see the command options
     private void printCommands() {
-        System.out.println("Bulletin Board Client (Part 1)");
+        System.out.println("Bulletin Board Client");
         System.out.println("Commands:");
         System.out.println("  %connect <ip> <port>");
         System.out.println("  %join");
         System.out.println("  %post <subject> | <body>");
         System.out.println("  %message <id>");
         System.out.println("  %leave");
-        System.out.println("  %exit");
-        System.out.println("  %help");
         System.out.println();
+        System.out.println("Part 2:");
+        System.out.println("  %groups");
+        System.out.println("  %groupjoin <group_id>");
+        System.out.println("  %groupusers <group_id>");
+        System.out.println("  %grouppost <group_id> <subject> | <body>");
+        System.out.println("  %groupleave <group_id>");
+        System.out.println("  %groupmessage <id>");
+        System.out.println();
+        System.out.println("  %exit");
     }
 
-    /* ==========================
-       Connection Handling
-       ========================== */
-
+    
+    //function to connect to the client. this will be called when the user does the %connect <ip> <port> command.
     private void handleConnect(String line) {
         try {
-            String[] parts = line.split("\\s+");
-            if (parts.length != 3) {
+            //spliting the input to get the ip and the port number
+            String[] p = line.split("\\s+");
+
+            //if the format from the user input is not correct, it will tell te correct usage
+            if (p.length != 3) {
                 System.out.println("Usage: %connect <ip> <port>");
                 return;
             }
 
-            String ip = parts[1];
-            int port = Integer.parseInt(parts[2]);
+            //getting the IP address from the input and turning it into an integer
+            String ip = p[1];
+            int port = Integer.parseInt(p[2]);
 
+            // creating the new client TCP socket using the ip address and port number that were inputted by the user
             clientSocket = new Socket(ip, port);
+
+            //creating a server reader to read the data coming in from the server using clientSocket
             serverReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+            // creating a server writer to send data tot the server using clienSocjet.getOutputStream
             serverWriter = new PrintWriter(clientSocket.getOutputStream(), true);
+            
+            // once it is connected the connected status will become true
             connected = true;
 
             System.out.println("Connected to " + ip + ":" + port);
 
-            // Start listener thread
+            //creating a thread to listen for any messages that come from the server and starting
             Thread t = new Thread(new ServerListener(serverReader, clientSocket));
             t.start();
 
-        } catch (Exception ex) {
-            System.out.println("ERROR connecting: " + ex.getMessage());
+        } catch (Exception e) {
+            System.out.println("ERROR connecting: " + e.getMessage());
         }
     }
 
+    //function to close the connection with the server, so it closes the server writer, server reader and client socket
     private void disconnect() {
         try {
             connected = false;
@@ -130,103 +161,149 @@ public final class BBClient {
             if (serverReader != null) serverReader.close();
             if (clientSocket != null) clientSocket.close();
             System.out.println("Disconnected.");
-        } catch (IOException ex) {
-            System.out.println("ERROR during disconnect: " + ex.getMessage());
-        }
+        } catch (IOException ignored) {}
     }
 
-    private void sendLine(String line) {
-        if (serverWriter != null) {
-            serverWriter.println(line);
-        }
+    //function to send the client text message string 
+    private void send(String msg) {
+        if (serverWriter != null) serverWriter.println(msg);
     }
 
-    /* ==========================
-       Command Handlers
-       ========================== */
+    //part 1
 
-    // %join → LOGIN <username>
-    private void handleJoin(BufferedReader userIn) {
+    //function for the join command and ot asks the the user for the username
+    private void handleLogin(BufferedReader userIn) {
+        //making sure the input is in the correct format and how to extract it
         try {
             System.out.print("Enter username: ");
-            String username = userIn.readLine();
-
-            if (username == null || username.trim().isEmpty()) {
+            String username = userIn.readLine().trim();
+            if (username.isEmpty()) {
                 System.out.println("Username cannot be empty.");
                 return;
             }
-
-            sendLine("LOGIN " + username.trim());
-
+            //sending the username informatio to the server
+            send("LOGIN " + username);
         } catch (IOException e) {
             System.out.println("Error reading username.");
         }
     }
 
-    // %post → MESSAGE subject|body
-    private void handlePost(String command) {
-        if (!command.contains("|")) {
+    //functions to handle posting a message to the default group
+    private void handlePost(String cmd) {
+        //making sure the input is in the correct format and how to extract it
+        if (!cmd.contains("|")) {
             System.out.println("Usage: %post <subject> | <body>");
             return;
         }
-
-        // Strip the command
-        String args = command.substring(5).trim();
+        String args = cmd.substring(5).trim();
         String[] parts = args.split("\\|", 2);
-
         if (parts.length != 2) {
             System.out.println("Usage: %post <subject> | <body>");
             return;
         }
-
         String subject = parts[0].trim();
         String body = parts[1].trim();
 
-        if (subject.isEmpty() || body.isEmpty()) {
-            System.out.println("Subject and body cannot be empty.");
-            return;
-        }
-
-        // Server expects: MESSAGE subject|content
-        sendLine("MESSAGE " + subject + "|" + body);
+        // posts the message to goup 1
+        send("MESSAGE 1 " + subject + "|" + body);
     }
 
-    // %message 3 → GET_MESSAGE 3
-    private void handleGetMessage(String command) {
-        String[] parts = command.split("\\s+");
-        if (parts.length != 2) {
+    private void handleMessageRetrieve(String cmd) {
+        //making sure the input is in the correct format and how to extract it
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
             System.out.println("Usage: %message <id>");
             return;
         }
-
-        sendLine("GET_MESSAGE " + parts[1]);
-    }
-}
-
-/* ==========================
-   Listener Thread
-   ========================== */
-
-class ServerListener implements Runnable {
-    private final BufferedReader in;
-    private final Socket socket;
-
-    public ServerListener(BufferedReader in, Socket socket) {
-        this.in = in;
-        this.socket = socket;
+        //sending the request for the specific message id
+        send("GET_MESSAGE " + p[1]);
     }
 
-    public void run() {
-        try {
-            String line;
-            while ((line = in.readLine()) != null) {
-                System.out.println("\n[SERVER] " + line);
-                System.out.print("> ");
-            }
-        } catch (IOException e) {
-            System.out.println("Connection closed by server.");
-        } finally {
-            try { socket.close(); } catch (IOException ignored) {}
+    //part 3
+
+    //function to handle the user trying to join s epcficif group using the group id
+    private void handleGroupJoin(String cmd) {
+        //making sure the input is in the correct format and how to extract it
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupjoin <group_id>");
+            return;
         }
+        //seinding the join command and the group id to the server
+        send("JOIN " + p[1]);
+    }
+
+    //function to handle when the user requests the list of users in a specfific group
+    private void handleGroupUsers(String cmd) {
+        //making sure the input is in the correct format and extracting it
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupusers <group_id>");
+            return;
+        }
+        //sending the users group id to the server
+        send("USERS " + p[1]);
+    }
+
+    //function to handle when the user wants to leave a sepcific roup
+    private void handleGroupLeave(String cmd) {
+        //making sure the input is in the correct format and extracting it
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupleave <group_id>");
+            return;
+        }
+        //sending the leave group id to the server
+        send("LEAVE " + p[1]);
+    }
+
+    //function to handle when the user posts a message to a specific group
+    private void handleGroupPost(String cmd) {
+        //making sure the input is in the correct format and extracting all of the infromation
+        // like tbe group id, subject, and body message content
+        if (!cmd.contains("|")) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
+            return;
+        }
+
+        //remove the "%grouppost" part
+        String remainder = cmd.substring(11).trim();
+
+        //extracting the remaining info
+        String[] p = remainder.split("\\s+", 2);
+        if (p.length < 2) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
+            return;
+        }
+
+        String groupId = p[0];
+        String rest = p[1];
+
+        //splitting the message into 2 parts
+        String[] parts = rest.split("\\|", 2);
+        if (parts.length != 2) {
+            System.out.println("Usage: %grouppost <group_id> <subject> | <body>");
+            return;
+        }
+
+        //extracting the subject and the message body
+        String subject = parts[0].trim();
+        String body = parts[1].trim();
+
+        //sending the all of the needed information for the post to the server
+        send("MESSAGE " + groupId + " " + subject + "|" + body);
+    }
+
+    //function to handle when the user asks to see a specific mesage using the message id
+    private void handleGroupMessage(String cmd) {
+        //making sure the input is in the correct format and extracting the infromation
+        String[] p = cmd.split("\\s+");
+        if (p.length != 2) {
+            System.out.println("Usage: %groupmessage <id>");
+            return;
+        }
+        //sending the get message command and message id to the server
+        send("GET_MESSAGE " + p[1]);
     }
 }
+
