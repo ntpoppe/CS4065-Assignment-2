@@ -1,3 +1,4 @@
+# Nathaniel Poppe, Nailah Sall, Rashi Loni
 # Server README
 
 This server is implemented in **Java**.
